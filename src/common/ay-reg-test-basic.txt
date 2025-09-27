@@ -1,0 +1,17 @@
+# Small test program to verify reading and writing of the PSG
+
+10 LET RA=!!RA!!
+
+20 LET RV=!!RV!!
+
+30 LET RR=!!RR!!
+
+40 FOR V = 0 TO 255 STEP 9
+
+50 OUT RA, 0
+
+60 OUT RV, V
+
+70 PRINT "v: ";V;" A: ";IN RA; " V: "; IN RV ; " R:"; IN RR
+
+80 NEXT V

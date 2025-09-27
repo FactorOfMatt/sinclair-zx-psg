@@ -1,0 +1,21 @@
+# Small test program as found in the magazine article
+
+5 LET RA=!!RA!!
+
+6 LET RO=!!RV!!
+
+10 OUT RA,0 : REM Select channel A register
+
+20 OUT RO,200 : REM Set tone period to 200.  Leave register 1 at 0
+
+30 OUT RA,8 : REM Point to register 8
+
+40 OUT RO, 10 : REM Set channel A volume to 10
+
+50 OUT RA, 7 : REM Point to register 7
+
+60 OUT RO, 254 : REM Switch on channel A only, bit 0 now equals 0
+
+70 INPUT "Press ENTER to switch off", A$
+
+80 OUT RO, 255: REM PSG still pointing to register 7.  Writing 255 to it sets bit 0 to 1

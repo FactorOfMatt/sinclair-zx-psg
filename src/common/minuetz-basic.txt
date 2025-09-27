@@ -1,0 +1,265 @@
+# This program uses a few interesting techniques that make it mostly "RUN"-once.  The most infuriating one is
+# the fact that line 1 always loads the tables+machine code - even if it is already there.  An IF could be added
+# to line 1 to prevent this, but self-modifying code modifies the SAVE statement in line 2 and expects it to be in a 
+# fixed location.
+
+# 1 CLEAR VAL "28929": IF PEEK 28930 <> 42 OR PEEK 28931 <> 0 THEN LOAD ""CODE : GO TO VAL "3"
+1 CLEAR VAL "28929": LOAD ""CODE : GO TO VAL "3"
+
+2 REM SAVE "A         "SCREEN$ RETURN
+
+# A=0
+# B=1
+# C=2
+# D=3
+# E=4
+# F=6
+# VO=2
+# KY=5/6=0.833
+# R=221
+# RO=223
+# LD=32159     ; dicenosto - left hand dice roll (for ml to display)
+# RD=32160     ; rhdiceno - right hand dice roll (for ml to display)
+# DT=31518     ; dicetables1
+# DI=31998     ; dicemain
+# VT=32161     ; voicesto
+# RN=32281     ; smc_rndtablo+1 (7e19)
+# BV=32291     ; smc_bartablo+1 (7e23)
+# SORT=32276   ; notesort
+# RNDT=32209   ; rndtable
+# PL=32350 (playmain) or 32487 (musicbox) depending if AY or not
+
+# The somewhat weird VAL statements and all the mathematics is to save BASIC-code space.
+# Spectrum BASIC holds the floating-point version of a number in the code space, so that's 6 extra bytes
+# per numeric constant.
+# KY starts as 5/6
+3 LET B=VAL "1": LET A=B-B: LET C=B+B: LET D=C+B: LET E=D+B: LET F=E+C: LET VO=C: LET KY=(E+B)/F: \
+  LET R=VAL("!!RA!!"): LET RO=VAL("!!RV!!"): LET RR=VAL("!!RR!!"): LET LD=VAL "32159": LET RD=LD+B: LET DT=VAL "31518":\
+  LET DI=VAL "31998": LET VT=VAL "32161": LET BV=VAL "32291":\
+  LET RN=VAL "32281": LET SORT=VAL "32276": LET RNDT=VAL "32209"
+
+# select PSG register 0.  Write 6 to register 0.
+# PL is 32350 ($7e5e) if reads-back 6 (PSG present), PL is 32487 ($7ee7) if not
+# if 31416 ($7ab8) is not 146 then set KY to 1/KY - 6/5ths? This flips the sense of KY to be 6/5
+# which has the effect of "putting the notes back" - aka making the key lower
+4 OUT R,A: OUT RO,F: LET PL=VAL "32350"+137*(IN RR<>F): IF PEEK 31416<>148 THEN LET KY=B/KY
+
+# O=256
+
+# 23658 is FLAGS2 - force caps-lock on
+# we always flip KY here too.
+36 LET O=VAL "256": LET L=RND*O: RANDOMIZE L*O: LET KY=B/KY: BORDER A: PAPER A: INK E+D: CLS : LET AU=A: LET CO=A: \
+  POKE VAL "23658", F+F: PLOT E*F,40: DRAW A,120: DRAW 220,A: DRAW A,-120:DRAW -220,A: OVER B: \
+  PRINT AT D,E;"DO YOU WISH TO :",AT F,E;" 1. GAMBLE WITH THE DICE ?          or,"; \
+  AT F+E,E;" 2. PREDICT THE FALL OF             THE DICE ?   or"; \
+  AT F+E+E,E; " 3. COMPOSE AUTOMATICALLY?": INPUT "ENTER 1, 2 OR 3 ";A$: IF A$="3"THEN LET AU=B: GO SUB 9930: GO TO 207
+
+# CO is set to 1 if we're just specifying the dice-rolls
+38 OVER A: IF A$="2" THEN LET CO=B
+
+# this is the dice-rolling - Q is the roll in question
+40 INVERSE A: DIM M(16): FOR Q=A to 15: PRINT AT 21,A;"THROW [ ENTER ]": PAUSE VAL "4E4"
+
+# M is left, L is right  (each 1-6 presumably)
+41 LET M=INT (RND*F)+B: RANDOMIZE RND*5E4: LET L=INT (RND*F)+B
+
+42 IF CO THEN INPUT "No. ON LEFT DICE ?";M: IF M<B OR M>F THEN GO TO 42
+
+43 IF CO THEN INPUT "No. ON RIGHT DICE ?";L: IF L<B OR L>F THEN GO TO 43
+
+# store the dice values separately so the ML can find them
+# RNDT stores the sums (0-10, not 2-12), M() stores the sums (2-12)
+44 POKE LD,M: POKE RD,L: POKE RNDT+Q,L+M-C: LET M(Q+B)=L+M
+
+50 DATA 235,160,180,165,170,125,217,110
+
+# dice-rolling animation
+60 CLS : RESTORE 50: FOR s=10 to -17 STEP -27: FOR n=B to C: READ x,y: GO SUB 9000: NEXT n: CLS: NEXT s
+
+200 PRINT AT A,A;: RANDOMIZE USR DI: PLOT E,171: DRAW 22,A: DRAW A,-14: DRAW -22,A: DRAW A,14: \
+    PRINT AT B,B; INVERSE B;Q+B: INVERSE A: NEXT Q: INPUT "'ENTER' TO CONTINUE ";A$
+
+# RANDOMIZE USR 3582 calls the Speccy ROM scroll routine
+# 23692 ($5C8C) in Reserved area - prevents asking "scroll..."
+# no idea what this effect is supposed to be - it just looks weird.
+205 FOR n=B to 22: RANDOMIZE USR 3582: POKE 23692,-B: PRINT "oooooo": NEXT n
+
+207 GO SUB VAL "9890": DIM M(1): IF AU THEN GO TO O-F
+
+# P1 is the part - it starts at 1, and ends at 2
+210 LET P1=b: INPUT "Manuscript ?(Y/N)";a$: IF A$<>"Y" THEN GO TO O-F
+
+# RN is self-modifying "low" byte.  209 or 217 - which is the start, or halfway through the random numbers table
+220 POKE RN,209: GO SUB VAL "9916": PRINT AT A,A;"PART ";P1: POKE RN,209+(P1-B)*8: GO SUB 8500:\
+    INPUT " SAVE manuscript ?(Y/N)";A$: IF A$<>"Y" THEN GO TO 230
+
+222 INPUT "TITLE ? ";A$: IF LEN A$>F=E THEN LET A$=A$( TO F+E)
+
+# modify the save command in line 2 then call it.
+# port 251 possibly checks if the printer is ready (or attached or something)
+224 IF IN 251=O-B THEN FOR N=B TO LEN A$: POKE VAL "23785"+N,CODE A$(N): NEXT N: GO SUB C: FOR N=B TO F+E:\
+    POKE VAL "23785"+N,CODE " ": NEXT N: GO TO 230
+
+226 LPRINT A$: LPRINT: COPY : LPRINT
+
+# loop for both parts...
+230 LET P1=P1+B: IF P1=C THEN GO TO 220
+
+252 INPUT "ENTER VOLUME(1-6) ";VO: IF VO>F THEN GO TO O-E
+
+253 INPUT "TEMPO (1-6) ";L: IF L<B OR L>F THEN GO TO O-D
+
+# 32385 is $7e81 - ld b, count1 <- we modify the loop modified by the tempo.
+# 31416 is $7ab8 - notetable + 2 = first playable not value
+# multiply notes by KY to change the key (5/6ths then 6/5ths to restore) - we play in a different key
+# each time we go back to the main "1,2 or 3" screen.  Odd.
+254 POKE VAL "32385",115+L*F: INPUT "'ENTER' TO CONTINUE ";A$: FOR N=VAL "31416" TO VAL "31517" STEP C:\
+    LET L=(PEEK N+O*PEEK (N+B))*KY: POKE N,L-(INT (L/O)*O): POKE N+B,INT (L/O): NEXT N: GO SUB VAL "9820": CLS: GO TO F
+
+# draw the manuscript for P1
+# reset smc_bartable to 240 ($f0)  -> $70f0  (bartable - 18)
+# TS starts at VT (which is voicesto)
+# V: 1 to 3 - voice
+# G: 1 to 2 - top or bottom stave
+# L: 0 to 3 - bar in stave
+# YS is 80 
+8530 LET Z=A: POKE BV,240: DIM N(7): FOR V=B TO D: RANDOMIZE USR SORT: LET TS=VT: LET YS=CODE "P": FOR G=B TO C:\
+     FOR L=A TO D
+
+# T: 2 to 7 - 6 values being read from VT[]
+# A() is for accidentals?  Entry will be 1 if we need a sharp sign
+8540 DIM A(7): FOR T=C TO F+B: LET N(T)=PEEK TS: LET TS=TS+B: IF N(T)>127 THEN LET A(T)=B: LET N(T)=N(T)-128
+
+# from 8540
+8546 NEXT T: GO SUB 8660
+
+# P is 18, 78, 138, 198 - where to start drawing notes per bar
+# T: 2 to 7
+8550 LET P=18+L*60: FOR T=C TO F + B
+
+# skip drawing if S(T) - the duration (sort of) is 0
+# U specifies tail goes up or down.  up is -1, down is 1
+8560 LET U=B: IF NOT S(T) THEN GO TO 8630
+
+# y1 is note * 3 (how far up the stave)
+# v=D AND y1>14 means voice 3, top half of bottom stave
+# v=B AND Y1>68 means voice 1, top half of top stave
+# v=C AND Y1>50 means voice 2, top half of bottom stave
+8570 LET X=P+(T-C)*10: LET Y1=(N(T)-B)*D: IF (v=D and y1>14) OR (V=B AND Y1>68) OR (V=C AND Y1>50) THEN LET U=-B
+
+# if Y1 is 0 OR 6 OR above 72 (6*12...) AND voice is 1 and Y1 is a multiple of 6 then Z=1
+8575 IF NOT Y1 OR Y1=F OR Y1>72 AND V=B AND INT (Y1/F)=Y1/F THEN LET Z=B
+
+# final Y position - calculated (Y1) plus base (YS)
+8585 LET Y=YS+Y1: IF S(T) <> 5 THEN GO TO 8610
+
+# skip if we're doing voice 2 - we don't show rests for voice 2 seeminlgy
+8590 IF V=C THEN GO TO 8630
+
+# always put the rest in the middle of the stave.  For voice 1 jump up even higher
+8600 LET Y=YS+32: IF V=B THEN LET Y=Y+32
+
+# a rest
+8605 CIRCLE X,Y,B: GO SUB 8775: GOTO 8630
+
+# normal circle-with-tail note
+8620 CIRCLE X,Y,B: CIRCLE X,Y,C: PLOT X+C*U,Y: DRAW A,11*U: GO SUB 8770+S(T)
+
+# ledger lines?
+8625 IF Z THEN PLOT X-E,Y: DRAW 8,A: IF V=Z THEN PLOT X-E,Y-F: DRAW 8,A
+
+# ledger line but a little shorter?  (6 vs 8)
+8626 IF z AND v=D THEN PLOT x-E,y+F: DRAW F,A
+
+# draw sharp symbol?
+8627 IF A(T) THEN PLOT X-8,Y: DRAW F,A: PLOT X-8,Y+C: DRAW F,A: PLOT X-7,Y-C: DRAW A,F: PLOT X-E,Y-C: DRAW A,F
+
+# finish the T loop from 8550, L, G and V loops from 8530
+# adjust smc_bartable to 240 + V () ($f0, $f1, $f2)  -> $70f0  notes for each voice are sequential in the bartable
+# YS set to bottom stave after first voice
+8630 LET Z=A: NEXT T: NEXT L: LET YS=C: NEXT G: POKE BV,240+V: NEXT V: RETURN
+
+# consolidate similar notes
+# skip if first note (at index 2) is zero
+8660 DIM S(7): IF NOT N(C) THEN GO TO 8670
+
+# loop though 5 notes (2-6).  if any two subsequent notes are different then set Q to 1
+8665 LET Q=A: FOR N=C TO F: IF N(N)<>N(N+B) THEN LET Q=B
+
+# if q is 0 then all notes are the same - set size of index 2, 4 and 6 to 2 : three quavers, rest are zeros
+8666 NEXT N: IF NOT Q THEN LET S(C)=C: LET S(E)=C: LET S(F)=C: RETURN
+
+# if any note is 0 then set S(index) to 5 - which is a rest.  Skip to next index
+8670 FOR N=C TO 7: IF NOT n(n) THEN LET s(n) = 5: LET n=n+B: GO TO 8710
+
+# if note is the same as the previous then special handling
+8690 IF n(n)=n(n-B) THEN GO SUB 8730: GO TO 8710
+
+# simply set the size of this note to semiquaver
+8700 LET s(n)=B
+
+# finish off the bar
+8710 NEXT n: RETURN
+
+# loop from index 1 to 3
+# if N(N-2) <> N(N-1)  OR  N(N-3) <> N(N-2) then set S(N-2)=S(N-2) + 1 [or S(N-3) = S(N-3) + 1]
+8730 FOR Q=B TO D: IF N(N-Q-B)<>N(N-Q) THEN LET S(N-Q)=S(N-Q)+B: RETURN
+
+# finish Q loop.  Set S(N-4) to S(N-4) + 1
+8732 NEXT Q: LET S(N-E)=S(N-E)+B: RETURN
+
+# semiquaver - S(note) = 1
+8771 DRAW D,-E*U: DRAW -D,E*U: DRAW A,-E: DRAW D,-E*U: RETURN
+
+# quaver - S(note) = 2
+8772 DRAW D,-E*U: RETURN
+
+# slash from tail then dot - a dotted quaver perhaps? - S(note) = 3
+8773 DRAW D,-E*U: CIRCLE X+E,Y,B: RETURN
+
+# Sir not appearing in this stave - S (note) = 4
+8774 RETURN
+
+# rest (missing the initial dot on left though) - S(note) = 5
+8775 DRAW 5,C,PI: DRAW -D,-8: RETURN
+
+# draw the rolling dice
+9005 PLOT X,Y: DRAW s,s*D/E: DRAW s,-s/C: DRAW -s,-s: DRAW -s,S*D/E: DRAW A,-s: DRAW s, -s*D/E: DRAW OVER B;A,s:\
+     DRAW A,-s: DRAW s,s: DRAW A,s: RETURN
+
+# play loop...
+# reset smc_bartable to 240 ($f0)  -> $70f0  (bartable - 18) - could have used BV variable to poke
+9800 POKE VAL "32291",240: INPUT "Repeat ?",a$: IF A$<>"Y" THEN RETURN
+
+# # reset smc_bartable to 240 ($f0)  -> $70f0  (bartable - 18)  - could have used BV variable to poke
+# reset sound chip for playing the tune
+9830 POKE VAL "32291",240: FOR N=A TO E+B: OUT R,N: OUT RO,A: NEXT N: OUT R,E+E: OUT RO,E+VO: OUT R,F+D: OUT RO,E+VO:\
+     OUT R,F+E: OUT RO,E+VO: OUT R,F+B: OUT RO,248
+
+9835 RANDOMIZE USR PL: OUT R,F+B: OUT RO,-B: GO TO VAL "9800"
+
+9890 LET p=DT-11: FOR n=A TO 15: LET p=p+11: POKE RNDT+N,PEEK (P+PEEK (RNDT+N)): NEXT N: IF AU THEN RETURN
+
+9900 CLS: PRINT AT C,F+E;"Dice Record": PLOT A,145: DRAW O-B,A: DRAW A,-70: DRAW -O+B,A: DRAW A,70:\
+     PLOT 60,75: DRAW A,70: OVER B: FOR K=A TO B: PRINT AT F+K*E,B;"PART ";K+B;: FOR N=B TO 8:\
+     PRINT TAB 5+N*D;M(K*8+N);: NEXT n: NEXT K: OVER A: RETURN
+
+#draw manuscript
+9916 BORDER D+E: PAPER D+E: INK D+F: CLS: LET Q=9923: LET L=14: GO SUB Q: LET L=N+F: GO SUB Q:\
+     LET L=N+C*F: GO SUB Q: LET L=N+F: GO SUB Q: LET L=44: GO SUB Q+B: LET L=122: GO SUB Q+B: LET M=F*F:\
+     PLOT C,M:: GO SUB Q+C: LET M=114: PLOT C,M: GO SUB Q+C
+
+9917 FOR N=O-B TO 45 STEP -61: PLOT N,14: DRAW A,60: PLOT N,92: DRAW A,60: NEXT N: PLOT O-E,14: DRAW A,60:\
+     LET L=O-F: CIRCLE L,23,B: CIRCLE L,29,B: CIRCLE L,59,B: CIRCLE L, 65,B: RETURN
+
+# stave lines
+9923 FOR N=L TO L+E*F STEP F: PLOT A,N: DRAW O-B,A: NEXT N: RETURN
+
+# treble clef symbol
+9924 PLOT E,L: DRAW E,A,C: DRAW -D,32,-.1: DRAW E,A,-C: DRAW -9,-F*D,-.6: DRAW F+F,A,3.6: DRAW -F-C,-E,D:\
+     CIRCLE E,L,B: RETURN
+
+# bass clef symbol
+9925 DRAW F,A,-C: DRAW -F,-C*F,-1.2: CIRCLE C,M-B,B: CIRCLE 11,M,B: CIRCLE 11,M-F,B: RETURN
+
+9930 LET L=RND*O: RANDOMIZE L*0:FOR N=0 TO 15: POKE RNDT+N, RND*10: NEXT N: RETURN
